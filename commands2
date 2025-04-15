@@ -1,0 +1,209 @@
+
+
+
+! ------------------------
+! VLAN CREATION
+! ------------------------
+Switch> enable
+Switch# configure terminal
+Switch(config)# vlan 10
+Switch(config-vlan)# name Sales
+Switch(config-vlan)# exit
+Switch(config)# vlan 20
+Switch(config-vlan)# name HR
+Switch(config-vlan)# exit
+
+! ------------------------
+! ASSIGN PORTS TO VLANS
+! ------------------------
+Switch(config)# interface fa0/1
+Switch(config-if)# switchport mode access
+Switch(config-if)# switchport access vlan 10
+Switch(config-if)# exit
+
+Switch(config)# interface fa0/2
+Switch(config-if)# switchport mode access
+Switch(config-if)# switchport access vlan 20
+Switch(config-if)# exit
+
+! ------------------------
+! CONFIGURE TRUNK PORT
+! ------------------------
+Switch(config)# interface fa0/24
+Switch(config-if)# switchport mode trunk
+Switch(config-if)# exit
+
+! ------------------------
+! ROUTER - SUBINTERFACES FOR INTERVLAN ROUTING
+! ------------------------
+Router> enable
+Router# configure terminal
+Router(config)# interface fa0/0.10
+Router(config-subif)# encapsulation dot1Q 10
+Router(config-subif)# ip address 192.168.10.1 255.255.255.0
+Router(config-subif)# exit
+
+Router(config)# interface fa0/0.20
+Router(config-subif)# encapsulation dot1Q 20
+Router(config-subif)# ip address 192.168.20.1 255.255.255.0
+Router(config-subif)# exit
+
+Router(config)# interface fa0/0
+Router(config-if)# no shutdown
+Router(config-if)# exit
+
+! ------------------------
+! DHCP CONFIGURATION
+! ------------------------
+Router(config)# ip dhcp excluded-address 192.168.10.1 192.168.10.10
+Router(config)# ip dhcp excluded-address 192.168.20.1 192.168.20.10
+
+Router(config)# ip dhcp pool VLAN10
+Router(dhcp-config)# network 192.168.10.0 255.255.255.0
+Router(dhcp-config)# default-router 192.168.10.1
+Router(dhcp-config)# dns-server 8.8.8.8
+Router(dhcp-config)# exit
+
+Router(config)# ip dhcp pool VLAN20
+Router(dhcp-config)# network 192.168.20.0 255.255.255.0
+Router(dhcp-config)# default-router 192.168.20.1
+Router(dhcp-config)# dns-server 8.8.8.8
+Router(dhcp-config)# exit
+
+! ------------------------
+! OSPF CONFIGURATION
+! ------------------------
+Router(config)# router ospf 1
+Router(config-router)# network 192.168.10.0 0.0.0.255 area 0
+Router(config-router)# network 192.168.20.0 0.0.0.255 area 0
+Router(config-router)# exit
+
+! ------------------------
+! SSH CONFIGURATION
+! ------------------------
+Switch(config)# hostname SW1
+SW1(config)# ip domain-name mynetwork.local
+SW1(config)# crypto key generate rsa
+1024
+SW1(config)# username admin password cisco123
+SW1(config)# line vty 0 4
+SW1(config-line)# transport input ssh
+SW1(config-line)# login local
+SW1(config-line)# exit
+SW1(config)# ip ssh version 2
+
+! ------------------------
+! STANDARD ACL
+! ------------------------
+Router(config)# access-list 10 deny 192.168.10.5
+Router(config)# access-list 10 permit any
+Router(config)# interface fa0/0
+Router(config-if)# ip access-group 10 in
+Router(config-if)# exit
+
+! ------------------------
+! PORT SECURITY
+! ------------------------
+Switch(config)# interface fa0/1
+Switch(config-if)# switchport mode access
+Switch(config-if)# switchport port-security
+Switch(config-if)# switchport port-security maximum 1
+Switch(config-if)# switchport port-security violation shutdown
+Switch(config-if)# switchport port-security mac-address sticky
+Switch(config-if)# exit
+
+! ------------------------
+! EXTENDED ACL
+! ------------------------
+Router(config)# access-list 100 permit tcp 192.168.10.0 0.0.0.255 any eq 80
+Router(config)# access-list 100 deny ip any any
+Router(config)# interface fa0/0
+Router(config-if)# ip access-group 100 in
+Router(config-if)# exit
+
+! ------------------------
+! NAT CONFIGURATION
+! ------------------------
+Router(config)# ip nat inside source static 192.168.10.10 203.0.113.10
+
+Router(config)# access-list 1 permit 192.168.10.0 0.0.0.255
+Router(config)# ip nat inside source list 1 interface fa0/1 overload
+
+Router(config)# interface fa0/0
+Router(config-if)# ip nat inside
+Router(config-if)# exit
+
+Router(config)# interface fa0/1
+Router(config-if)# ip nat outside
+Router(config-if)# exit
+
+! ------------------------
+! SITE-TO-SITE VPN SETUP
+! ------------------------
+Router(config)# crypto isakmp policy 10
+Router(config-isakmp)# encryption aes
+Router(config-isakmp)# hash sha
+Router(config-isakmp)# authentication pre-share
+Router(config-isakmp)# group 2
+Router(config-isakmp)# lifetime 86400
+Router(config-isakmp)# exit
+
+Router(config)# crypto isakmp key cisco123 address 203.0.113.2
+
+Router(config)# crypto ipsec transform-set TRANS1 esp-aes esp-sha-hmac
+
+Router(config)# access-list 110 permit ip 192.168.10.0 0.0.0.255 192.168.20.0 0.0.0.255
+
+Router(config)# crypto map VPN-MAP 10 ipsec-isakmp
+Router(config-crypto-map)# set peer 203.0.113.2
+Router(config-crypto-map)# set transform-set TRANS1
+Router(config-crypto-map)# match address 110
+Router(config-crypto-map)# exit
+
+Router(config)# interface fa0/1
+Router(config-if)# crypto map VPN-MAP
+Router(config-if)# exit
+
+
+password encryption
+
+enable
+configure terminal
+
+! --------------------------
+! Encrypt all passwords
+! --------------------------
+service password-encryption
+
+! --------------------------
+! Set the ENABLE secret password (encrypted by default)
+! --------------------------
+enable secret cisco123
+
+! --------------------------
+! Set CONSOLE password
+! --------------------------
+line console 0
+password consolepass
+login
+exit
+
+! --------------------------
+! Set VTY (Telnet/SSH) password
+! --------------------------
+line vty 0 4
+password vtypass
+login
+exit
+
+! --------------------------
+! (Optional) Set MOTD Banner
+! --------------------------
+banner motd # Unauthorized access is prohibited! #
+
+! --------------------------
+! Save configuration
+! --------------------------
+end
+write memory
+
